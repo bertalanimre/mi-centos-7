@@ -5,15 +5,16 @@ IFS=$'\n\t'
 
 CUR_TIME=`date +%FT%TZ`
 CUSTOM_RPMS=./RPMS
-DVD_LAYOUT=/data/centos-7-iso-layout
+DVD_LAYOUT=./centos-7-iso-layout
 DVD_TITLE='CentOS-7-Joyent'
-ISO=CentOS-7-x86_64-Minimal-1511.iso
-ISO_DIR=/data/fetched-iso
+ISO=CentOS-7-x86_64-Minimal-1611.iso
+ISO_DIR=./fetched_iso
 ISO_FILENAME=./centos-7-joyent.iso
 KS_CFG=./ks.cfg
 GUESTTOOLS=sdc-vmtools
-MIRROR=http://buildlogs.centos.org/rolling/7/isos/x86_64
-MOUNT_POINT=/mnt/centos7
+MIRROR=http://ftp.freepark.org/pub/linux/distributions/centos/7/isos/x86_64/
+MOUNT_POINT=./mount
+CUSTOMS=./customs
 
 function fetch_iso() {
     if [ ! -d $ISO_DIR ]; then
@@ -33,21 +34,23 @@ function fetch_iso() {
     gpg --list-keys | grep 4096R/F4A80EB5 > /dev/null
     if [[ $? -gt 0 ]]; then
         echo "Adding gpg signing keys"
-        gpg --keyserver pool.sks-keyservers.net --recv-keys 6341AB2753D78A78A7C27BB124C6A8A7F4A80EB5
+	wget http://mirror.centos.org/centos/RPM-GPG-KEY-CentOS-7 -P $ISO_DIR/
+	gpg --import $ISO_DIR/RPM-GPG-KEY-CentOS-7
     fi
     set -e
-    
+   
     echo "Checking to see if we have the latest $ISO:"
     echo "  Getting signed checksum (sha256sum.txt.asc)"
     curl -s -o $ISO_DIR/sha256sum.txt.asc $MIRROR/sha256sum.txt.asc
-    
+
     ISO_NAME=$(echo $ISO | cut -f1 -d'.')
-    
-    echo "  Verifying signed checksum sha256sum.txt.asc"
-    gpg --verify $ISO_DIR/sha256sum.txt.asc
-    
+
+	#THESE NEEDS TO BE FIXED!!!!!!!
+    #echo "  Verifying signed checksum sha256sum.txt.asc"
+    #gpg --verify $ISO_DIR/sha256sum.txt.asc
+  
     CHECKSUM=$(grep $ISO_NAME $ISO_DIR/sha256sum.txt.asc | cut -f1 -d' ')
-    
+   
     if [[ $(sha256sum $ISO_DIR/$ISO | cut -f1 -d' ') == "$CHECKSUM" ]]; then
         echo "  Checksums match, using local copy of $ISO"
     else
@@ -86,10 +89,10 @@ function create_layout() {
     mount $ISO_DIR/$ISO $MOUNT_POINT -o loop
     pushd $MOUNT_POINT > /dev/null 2>&1
     echo "Populating Layout"
-    tar cf - . | tar xpf - -C $DVD_LAYOUT
+    tar cf - . | tar xpf - -C ../$DVD_LAYOUT
     popd > /dev/null 2>&1
     umount $MOUNT_POINT
-    
+   
     if [ -d $CUSTOM_RPMS ]; then
         echo "Copying custom RPMS"
         find $CUSTOM_RPMS -type f -exec cp {} $DVD_LAYOUT/Packages \;
@@ -101,6 +104,11 @@ function create_layout() {
 function copy_ks_cfg() {
     echo "Copying Kickstart file"
     cp $KS_CFG $DVD_LAYOUT/
+}
+
+function copy_customs() {
+    echo "Copying Custom files"
+    cp -r $CUSTOMS $DVD_LAYOUT/customs
 }
 
 function copy_guest_tools() {
@@ -129,9 +137,10 @@ function create_newiso() {
     copy_guest_tools
     cleanup_layout
     copy_ks_cfg
+    copy_customs
     modify_boot_menu
     echo "Preparing NEW ISO"
-    pushd $DVD_LAYOUT > /dev/null 2>&1
+    #pushd $DVD_LAYOUT > /dev/null 2>&1    ## WTF IS THIS FOR?
     createrepo -g repodata/comps.xml $DVD_LAYOUT
     echo "Creating NEW ISO"
     mkisofs -r -R -J -T -v \
